@@ -71,6 +71,7 @@ def get_brew_apps(force_refresh: bool = False):
 def get_brew_app_paths():
     """Get paths of all Homebrew cask installed applications using API data with batch optimization"""
     from .homebrew_api import HomebrewAPI
+    from .homebrew_installed import is_cask_installed
     from utils.app_metadata import get_bundle_identifier
     import glob
 
@@ -94,11 +95,12 @@ def get_brew_app_paths():
     # Batch lookup by app names
     name_results = api.find_casks_batch(app_names)
 
-    # Track which apps were found by name
+    # Track which apps were found by name (and actually installed via brew)
     found_by_name = set()
     for i, app_path in enumerate(app_files):
         app_name = app_names[i]
-        if name_results.get(app_name):
+        result = name_results.get(app_name)
+        if result and is_cask_installed(result[0]):
             brew_app_paths.append(app_path)
             found_by_name.add(app_path)
 
@@ -119,7 +121,7 @@ def get_brew_app_paths():
             bundle_results = api.find_casks_by_bundle_ids_batch(bundle_ids)
 
             for bundle_id, result in bundle_results.items():
-                if result:
+                if result and is_cask_installed(result[0]):
                     app_path = app_path_to_bundle_id[bundle_id]
                     brew_app_paths.append(app_path)
 
