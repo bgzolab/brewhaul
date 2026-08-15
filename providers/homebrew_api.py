@@ -128,6 +128,23 @@ class HomebrewAPI:
         except IOError as e:
             logger.warning(f"Could not save cache: {e}")
 
+    def _index_app_name(self, name: str, token: str):
+        """Index a cask's installed app filename for name-based matching.
+
+        Example: the "baidunetdisk" cask installs "BaiduNetdisk_mac.app", so
+        "BaiduNetdisk_mac" is indexed and matches the /Applications entry.
+        """
+        if not name:
+            return
+        base = os.path.basename(name.strip()).replace('.app', '')
+        if not base:
+            return
+        for key in (base, base.lower()):
+            if key not in self._app_name_to_cask:
+                self._app_name_to_cask[key] = []
+            if token not in self._app_name_to_cask[key]:
+                self._app_name_to_cask[key].append(token)
+
     def _build_lookup_tables(self, data: List[Dict]):
         """Build lookup tables for fast matching."""
         self._app_name_to_cask = {}  # Will store name -> list of cask tokens
@@ -173,6 +190,20 @@ class HomebrewAPI:
             artifacts = cask.get('artifacts', [])
             for artifact in artifacts:
                 if isinstance(artifact, dict):
+                    # Index app artifact filenames (e.g. "BaiduNetdisk_mac.app")
+                    app_artifacts = artifact.get('app')
+                    if isinstance(app_artifacts, str):
+                        app_artifacts = [app_artifacts]
+                    if isinstance(app_artifacts, list):
+                        for item in app_artifacts:
+                            if isinstance(item, str):
+                                self._index_app_name(item, token)
+
+                    # Index target path (e.g. "/Applications/BaiduNetdisk_mac.app")
+                    target = artifact.get('target')
+                    if isinstance(target, str):
+                        self._index_app_name(target, token)
+
                     # Check for uninstall quit field which often contains bundle ID
                     uninstall = artifact.get('uninstall', [])
                     if isinstance(uninstall, list):
