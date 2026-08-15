@@ -71,6 +71,15 @@ def is_appstore_app(app_path):
             logger.debug(f"Found MAS receipt for {app_name}")
             return True
 
+        # Method 1b: iOS apps running on Apple Silicon Macs are wrapped bundles
+        # (Wrapper/ directory + WrappedBundle symlink). App Store installs are
+        # marked by iTunesMetadata.plist / BundleMetadata.plist inside Wrapper/.
+        for metadata_file in ("iTunesMetadata.plist", "BundleMetadata.plist"):
+            metadata_path = os.path.join(app_path, "Wrapper", metadata_file)
+            if os.path.isfile(metadata_path):
+                logger.debug(f"Found {metadata_file} for {app_name} (iOS app on Mac)")
+                return True
+
         # Method 2: Check using mas search if available (for edge cases)
         from providers.appstore import check_mas_installed, is_mas_app_by_search
         try:
