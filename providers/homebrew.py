@@ -68,6 +68,47 @@ def get_brew_apps(force_refresh: bool = False):
         return []
 
 
+def get_local_cask_app_names():
+    """Map installed cask app basenames to cask tokens by scanning the Caskroom.
+
+    This covers casks from custom taps, which are absent from the official
+    Homebrew cask API and would otherwise be missed by API-based matching.
+    """
+    result = {}
+    try:
+        prefix = subprocess.run(["brew", "--prefix"], capture_output=True, text=True, timeout=10)
+        if prefix.returncode != 0:
+            return result
+        caskroom = os.path.join(prefix.stdout.strip(), "Caskroom")
+        if not os.path.isdir(caskroom):
+            return result
+        for token in os.listdir(caskroom):
+            token_dir = os.path.join(caskroom, token)
+            if not os.path.isdir(token_dir):
+                continue
+            try:
+                version_dirs = os.listdir(token_dir)
+            except OSError:
+                continue
+            for version_dir in version_dirs:
+                if version_dir == '.metadata':
+                    continue
+                version_path = os.path.join(token_dir, version_dir)
+                if not os.path.isdir(version_path):
+                    continue
+                try:
+                    entries = os.listdir(version_path)
+                except OSError:
+                    continue
+                for entry in entries:
+                    if entry.endswith(".app") and os.path.isdir(os.path.join(version_path, entry)):
+                        base = entry.replace(".app", "")
+                        result[base] = token
+    except Exception as e:
+        logger.error(f"Error scanning Caskroom: {e}")
+    return result
+
+
 def get_brew_app_paths():
     """Get paths of all Homebrew cask installed applications using API data with batch optimization"""
     from .homebrew_api import HomebrewAPI
@@ -76,6 +117,26 @@ def get_brew_app_paths():
     import glob
 
     brew_app_paths = []
+    app_files = glob.glob("/Applications/*.app")
+
+    if not app_files:
+        return brew_app_paths
+
+    # Local match first: scan the Caskroom, which includes custom tap casks
+    local_app_names = get_local_cask_app_names()
+    found_local = set()
+    for app_path in app_files:
+        app_name = os.path.basename(app_path).replace('.app', '')
+        if app_name in local_app_names:
+            brew_app_paths.append(app_path)
+            found_local.add(app_path)
+
+    remaining = [p for p in app_files if p not in found_local]
+    if not remaining:
+        logger.info(f"Found {len(brew_app_paths)} Homebrew-managed apps via local Caskroom data")
+        return brew_app_paths
+
+    # API-based matching for the rest
     api = HomebrewAPI()
 
     # Load API data
@@ -83,21 +144,15 @@ def get_brew_app_paths():
         logger.warning("Could not load Homebrew API data for path detection")
         return brew_app_paths
 
-    # Get all installed apps from /Applications
-    app_files = glob.glob("/Applications/*.app")
-
-    if not app_files:
-        return brew_app_paths
-
     # Batch processing: collect all app names and bundle IDs first
-    app_names = [os.path.basename(app_path).replace('.app', '') for app_path in app_files]
+    app_names = [os.path.basename(app_path).replace('.app', '') for app_path in remaining]
 
     # Batch lookup by app names
     name_results = api.find_casks_batch(app_names)
 
     # Track which apps were found by name (and actually installed via brew)
     found_by_name = set()
-    for i, app_path in enumerate(app_files):
+    for i, app_path in enumerate(remaining):
         app_name = app_names[i]
         result = name_results.get(app_name)
         if result and is_cask_installed(result[0]):
@@ -105,7 +160,7 @@ def get_brew_app_paths():
             found_by_name.add(app_path)
 
     # For remaining apps, try bundle ID matching in batch
-    remaining_apps = [app_path for app_path in app_files if app_path not in found_by_name]
+    remaining_apps = [app_path for app_path in remaining if app_path not in found_by_name]
     if remaining_apps:
         bundle_ids = []
         app_path_to_bundle_id = {}
