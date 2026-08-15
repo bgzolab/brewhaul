@@ -15,6 +15,7 @@ class Colors:
     YELLOW = "\033[33m"
     ORANGE = "\033[38;5;208m"
     BLUE = "\033[34m"
+    MAGENTA = "\033[35m"
     CYAN = "\033[36m"
     DIM = "\033[2m"
 

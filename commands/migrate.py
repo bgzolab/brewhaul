@@ -213,6 +213,11 @@ def handle_migrate_command(args, apps, brew_cask_names=None, brew_paths=None):
                         f"{StatusIcons.INFO} {Colors.BLUE}App Store apps (excluded){Colors.RESET}",
                         str(len(registry.appstore_apps))
                     ))
+                if registry.system_apps:
+                    summary_rows.append((
+                        f"{StatusIcons.INFO} {Colors.MAGENTA}System apps (excluded){Colors.RESET}",
+                        str(len(registry.system_apps))
+                    ))
 
             summary_table = formatter.format_table(
                 headers=['Category', 'Count'],

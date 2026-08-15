@@ -14,24 +14,28 @@ def handle_list_command(args, apps, brew_cask_names, brew_paths):
     # Extract data for backward compatibility
     brew_apps_list = registry.homebrew_apps
     appstore_apps_list = registry.appstore_apps
+    system_apps_list = registry.system_apps
     manual_apps_list = registry.manual_apps
     brew_count = registry.homebrew_count
     appstore_count = registry.appstore_count
+    system_count = registry.system_count
     manual_count = registry.manual_count
 
     # Use args.types if available (comma-separated support), otherwise fall back to args.type
-    types_to_show = getattr(args, 'types', [args.type] if args.type != 'all' else ['manual', 'homebrew', 'appstore'])
+    types_to_show = getattr(args, 'types', [args.type] if args.type != 'all' else ['manual', 'homebrew', 'appstore', 'system'])
 
     if args.format == 'json':
         result = {
             'homebrew': brew_apps_list if 'homebrew' in types_to_show else [],
             'appstore': appstore_apps_list if 'appstore' in types_to_show else [],
+            'system': system_apps_list if 'system' in types_to_show else [],
             'manual': manual_apps_list if 'manual' in types_to_show else [],
             'summary': {
                 'homebrew_count': brew_count,
                 'appstore_count': appstore_count,
+                'system_count': system_count,
                 'manual_count': manual_count,
-                'total': brew_count + appstore_count + manual_count
+                'total': brew_count + appstore_count + system_count + manual_count
             }
         }
         print(json.dumps(result, indent=2))
@@ -51,6 +55,10 @@ def handle_list_command(args, apps, brew_cask_names, brew_paths):
         for app_name in appstore_apps_list:
             table_rows.append((app_name, f"{Colors.BLUE}App Store{Colors.RESET}"))
 
+    if 'system' in types_to_show:
+        for app_name in system_apps_list:
+            table_rows.append((app_name, f"{Colors.MAGENTA}System{Colors.RESET}"))
+
     if 'manual' in types_to_show:
         for app_name in manual_apps_list:
             table_rows.append((app_name, f"{Colors.YELLOW}Manual{Colors.RESET}"))
@@ -67,7 +75,7 @@ def handle_list_command(args, apps, brew_cask_names, brew_paths):
     print(table)
 
     # Print summary as a table
-    total_count = brew_count + appstore_count + manual_count
+    total_count = brew_count + appstore_count + system_count + manual_count
     print(f"\n{Colors.BOLD}Summary:{Colors.RESET}")
 
     summary_rows = []
@@ -83,6 +91,13 @@ def handle_list_command(args, apps, brew_cask_names, brew_paths):
         summary_rows.append((
             f"{Colors.BLUE}App Store Applications{Colors.RESET}",
             str(appstore_count),
+            f"{percentage:.1f}%"
+        ))
+    if 'system' in types_to_show:
+        percentage = (system_count / total_count * 100) if total_count > 0 else 0
+        summary_rows.append((
+            f"{Colors.MAGENTA}System Applications{Colors.RESET}",
+            str(system_count),
             f"{percentage:.1f}%"
         ))
     if 'manual' in types_to_show:

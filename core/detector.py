@@ -15,10 +15,12 @@ class AppRegistry(NamedTuple):
     """Structured registry containing categorized applications."""
     homebrew_apps: List[str]
     appstore_apps: List[str]
+    system_apps: List[str]
     manual_apps: List[str]
     manual_app_paths: Dict[str, str]
     homebrew_count: int
     appstore_count: int
+    system_count: int
     manual_count: int
     total_count: int
 
@@ -93,6 +95,40 @@ def is_appstore_app(app_path):
         return False
     except Exception as e:
         logger.error(f"Unexpected error checking if {app_path} is App Store app: {e}")
+        return False
+
+
+def is_system_app(app_path):
+    """Check if an app is part of macOS (owned by an Apple system package).
+
+    Uses pkgutil to look up which registered package owns the app path.
+    Apple system apps are owned by com.apple.* packages (e.g. Safari is
+    owned by com.apple.files.data-template). Third-party pkg installs and
+    manual downloads have no package ownership.
+    """
+    try:
+        if not app_path or not os.path.exists(app_path):
+            logger.warning(f"App path does not exist: {app_path}")
+            return False
+
+        result = subprocess.run(['pkgutil', '--file-info', app_path],
+                                capture_output=True, text=True, timeout=5)
+        if result.returncode != 0:
+            return False
+
+        for line in result.stdout.splitlines():
+            if line.startswith('pkgid: com.apple.'):
+                logger.debug(f"Found system package for {app_path}: {line.strip()}")
+                return True
+        return False
+    except subprocess.TimeoutExpired:
+        logger.warning(f"Timeout while checking system package for {app_path}")
+        return False
+    except subprocess.SubprocessError as e:
+        logger.debug(f"Subprocess error while checking system package for {app_path}: {e}")
+        return False
+    except Exception as e:
+        logger.error(f"Unexpected error checking if {app_path} is system app: {e}")
         return False
 
 
@@ -178,6 +214,7 @@ def build_app_registry(apps: List[str], brew_paths: Optional[List[str]] = None,
     """
     homebrew_apps = []
     appstore_apps = []
+    system_apps = []
     manual_apps = []
     manual_app_paths = {}
 
@@ -226,7 +263,16 @@ def build_app_registry(apps: List[str], brew_paths: Optional[List[str]] = None,
                 except Exception as e:
                     logger.warning(f"Error checking Homebrew status for {app_name}: {e}")
 
-                # If not Homebrew or App Store, it's manually installed
+                # Check if the app is part of macOS (system app)
+                try:
+                    if is_system_app(app_path):
+                        system_apps.append(app_name)
+                        logger.debug(f"Classified {app_name} as system app")
+                        continue
+                except Exception as e:
+                    logger.warning(f"Error checking system status for {app_name}: {e}")
+
+                # If not Homebrew, App Store, or system, it's manually installed
                 manual_apps.append(app_name)
                 manual_app_paths[app_name] = app_path
                 logger.debug(f"Classified {app_name} as manual install")
@@ -250,21 +296,25 @@ def build_app_registry(apps: List[str], brew_paths: Optional[List[str]] = None,
     # Sort all lists alphabetically for consistent output
     homebrew_apps.sort()
     appstore_apps.sort()
+    system_apps.sort()
     manual_apps.sort()
 
     # Calculate counts
     homebrew_count = len(homebrew_apps)
     appstore_count = len(appstore_apps)
+    system_count = len(system_apps)
     manual_count = len(manual_apps)
-    total_count = homebrew_count + appstore_count + manual_count
+    total_count = homebrew_count + appstore_count + system_count + manual_count
 
     return AppRegistry(
         homebrew_apps=homebrew_apps,
         appstore_apps=appstore_apps,
+        system_apps=system_apps,
         manual_apps=manual_apps,
         manual_app_paths=manual_app_paths,
         homebrew_count=homebrew_count,
         appstore_count=appstore_count,
+        system_count=system_count,
         manual_count=manual_count,
         total_count=total_count
     )
@@ -283,11 +333,13 @@ def classify_apps(apps, brew_cask_names, brew_paths):
     """
     brew_apps_list = []
     appstore_apps_list = []
+    system_apps_list = []
     manual_apps_list = []
     manual_app_paths = {}
 
     brew_count = 0
     appstore_count = 0
+    system_count = 0
     manual_count = 0
 
     for app in apps:
@@ -299,6 +351,9 @@ def classify_apps(apps, brew_cask_names, brew_paths):
         elif is_appstore_app(app):
             appstore_apps_list.append(app_name)
             appstore_count += 1
+        elif is_system_app(app):
+            system_apps_list.append(app_name)
+            system_count += 1
         else:
             manual_apps_list.append(app_name)
             manual_app_paths[app_name] = app
@@ -307,7 +362,8 @@ def classify_apps(apps, brew_cask_names, brew_paths):
     # Sort all lists alphabetically
     brew_apps_list.sort()
     appstore_apps_list.sort()
+    system_apps_list.sort()
     manual_apps_list.sort()
 
-    return (brew_apps_list, appstore_apps_list, manual_apps_list, manual_app_paths,
-            brew_count, appstore_count, manual_count)
+    return (brew_apps_list, appstore_apps_list, system_apps_list, manual_apps_list, manual_app_paths,
+            brew_count, appstore_count, system_count, manual_count)

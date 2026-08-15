@@ -67,7 +67,7 @@ For more help on a command: brewhaul <command> --help
 
     # Process --type argument for list command
     if args.command == 'list' and hasattr(args, 'type'):
-        valid_types = {'manual', 'homebrew', 'appstore', 'all'}
+        valid_types = {'manual', 'homebrew', 'appstore', 'system', 'all'}
         if ',' in args.type:
             # Split comma-separated values and validate
             types = [t.strip() for t in args.type.split(',')]
@@ -80,7 +80,7 @@ For more help on a command: brewhaul <command> --help
             # Single value - validate and convert to list
             if args.type not in valid_types:
                 parser.error(f"Invalid type: {args.type}. Valid types are: {', '.join(valid_types)}")
-            args.types = [args.type] if args.type != 'all' else ['manual', 'homebrew', 'appstore']
+            args.types = [args.type] if args.type != 'all' else ['manual', 'homebrew', 'appstore', 'system']
 
     return args
 
